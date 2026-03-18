@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.hane</groupId>
+    <artifactId>smartInterviewer</artifactId>
+    <version>0.0.1</version>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <picocli.version>4.7.6</picocli.version>
+        <langchain4j.version>1.12.2</langchain4j.version>
+        <langchain4j.beta.version>1.12.2-beta22</langchain4j.beta.version>
+        <graalvm.version>21.0.2</graalvm.version>
+    </properties>
+
+    <dependencies>
+        <!-- CLI -->
+        <dependency>
+            <groupId>info.picocli</groupId>
+            <artifactId>picocli</artifactId>
+            <version>${picocli.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jline</groupId>
+            <artifactId>jline</artifactId>
+            <version>3.25.1</version>
+        </dependency>
+
+        <!-- LangChain4j -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+            <version>${langchain4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai</artifactId>
+            <version>${langchain4j.version}</version>
+        </dependency>
+
+        <!-- Markdown 解析 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-document-parser-markdown</artifactId>
+            <version>${langchain4j.beta.version}</version>
+        </dependency>
+
+        <!-- 向量数据库-->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-community-duckdb</artifactId>
+            <version>${langchain4j.beta.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-embeddings-bge-small-zh</artifactId>
+            <version>1.9.0-beta16</version>
+        </dependency>
+
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.30</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Gson for JSON parsing -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- GraalVM Native Image 插件 -->
+            <plugin>
+                <groupId>org.graalvm.buildtools</groupId>
+                <artifactId>native-maven-plugin</artifactId>
+                <version>0.10.1</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <imageName>ai-interviewer</imageName>
+                    <mainClass>com.interviewer.cli.AiInterviewerCli</mainClass>
+                    <buildArgs>
+                        <!-- 基础优化 -->
+                        <buildArg>--no-fallback</buildArg>
+                        <buildArg>-march=compatibility</buildArg>
+                        <buildArg>-O2</buildArg>
+
+                        <!-- JNI 支持（DuckDB 必需） -->
+                        <buildArg>--enable-jni</buildArg>
+                        <buildArg>-H:+JNI</buildArg>
+
+                        <!-- 资源包含（Embedding 模型文件等） -->
+                        <buildArg>-H:IncludeResources=.*\.onnx$</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.db$</buildArg>
+
+                        <!-- 压缩 -->
+                        <buildArg>-H:+StaticExecutableWithDynamicLibC</buildArg>
+                    </buildArgs>
+                </configuration>
+            </plugin>
+
+            <!-- Picocli 注解处理器（自动生成反射配置） -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.12.1</version>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.30</version>
+                        </path>
+                        <path>
+                            <groupId>info.picocli</groupId>
+                            <artifactId>picocli-codegen</artifactId>
+                            <version>${picocli.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

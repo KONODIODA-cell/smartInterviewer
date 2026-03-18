@@ -1,0 +1,22 @@
+[
+  {
+    "name": "java.io.File",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "java.nio.file.Path",
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "java.sql.DriverManager",
+    "methods": [
+      {"name": "getConnection", "parameterTypes": ["java.lang.String"]},
+      {"name": "registerDriver", "parameterTypes": ["java.sql.Driver"]}
+    ]
+  },
+  {
+    "name": "org.duckdb.DuckDBNative",
+    "allDeclaredMethods": true
+  }
+]

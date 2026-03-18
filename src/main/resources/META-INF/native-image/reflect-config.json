@@ -1,0 +1,28 @@
+[
+  {
+    "name": "org.duckdb.DuckDBDriver",
+    "methods": [{"name": "<init>", "parameterTypes": []}],
+    "allDeclaredConstructors": true
+  },
+  {
+    "name": "dev.langchain4j.model.embedding.onnx.bgesmallzh.BgeSmallZhEmbeddingModel",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "dev.langchain4j.store.embedding.DuckDbEmbeddingStore",
+    "allDeclaredConstructors": true
+  },
+  {
+    "name": "com.interviewer.model.InterviewQuestion",
+    "allDeclaredFields": true,
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true
+  },
+  {
+    "name": "com.interviewer.model.EvaluationResult",
+    "allDeclaredFields": true,
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true
+  }
+]
