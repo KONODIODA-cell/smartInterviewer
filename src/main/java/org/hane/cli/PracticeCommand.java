@@ -4,11 +4,14 @@ import org.hane.model.EvaluationResult;
 import org.hane.model.InterviewQuestion;
 import org.hane.model.InterviewerPersona;
 import org.hane.service.practiceService.InterviewSessionService;
+import org.hane.service.practiceService.PersonaService;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.util.List;
 import java.util.Scanner;
+
+import static org.hane.model.InterviewQuestion.*;
 
 /**
  * 模拟面试命令
@@ -26,7 +29,7 @@ public class PracticeCommand implements Runnable {
 			description = "题目难度：BASIC(基础)、INTERMEDIATE(进阶)、ADVANCED(挑战)",
 			defaultValue = "INTERMEDIATE"
 	)
-	private InterviewQuestion.Difficulty difficulty;
+	private Difficulty difficulty;
 
 	@Option(
 			names = {"-c", "--count"},
@@ -37,29 +40,16 @@ public class PracticeCommand implements Runnable {
 
 	@Override
 	public void run() {
-		// 初始化面试会话服务（自动载入 AI 人格）
-		InterviewSessionService sessionService = new InterviewSessionService();
-
 		Scanner scanner = new Scanner(System.in);
 
+		// 获取所有的面试官人格
+		// 用户选择面试官人格
+		InterviewerPersona selectedPersona = selectPersona(scanner);
+
+		// 初始化面试会话服务
+		InterviewSessionService sessionService = new InterviewSessionService(selectedPersona,questionCount,difficulty);
 		try {
-			// 列出所有可用的人格供用户选择
-			InterviewerPersona selectedPersona = selectPersona(sessionService, scanner);
-			if (selectedPersona == null) {
-				System.out.println("未选择面试官，退出面试。");
-				return;
-			}
-			
-			// 设置选定的人格
-			sessionService.setPersona(selectedPersona);
-			
-			// 获取面试主题
-			String topic = selectedPersona.expertise() != null && !selectedPersona.expertise().isEmpty() 
-					? selectedPersona.expertise() 
-					: "通用技术";
-			
 			// 开始面试
-			System.out.println(sessionService.startInterview(topic));
 			System.out.println("\n按 Enter 键开始第一题...");
 			scanner.nextLine();
 
@@ -69,7 +59,7 @@ public class PracticeCommand implements Runnable {
 			while (questionIndex <= questionCount) {
 				// 生成题目
 				System.out.printf("\n========== 第 %d/%d 题 ==========%n", questionIndex, questionCount);
-				InterviewQuestion question = sessionService.nextQuestion(topic, difficulty);
+				InterviewQuestion question = sessionService.nextQuestion();
 
 				System.out.println("\n📝 " + question.content());
 				System.out.println("\n考察点：" + String.join("、", question.keyPoints()));
@@ -167,16 +157,17 @@ public class PracticeCommand implements Runnable {
 			scanner.close();
 		}
 	}
-	
+
+	PersonaService personaService = new PersonaService();
+
 	/**
 	 * 交互式选择面试官人格
 	 * 
-	 * @param sessionService 会话服务
 	 * @param scanner 输入扫描器
 	 * @return 选定的人格，如果用户取消则返回 null
 	 */
-	private InterviewerPersona selectPersona(InterviewSessionService sessionService, Scanner scanner) {
-		List<InterviewerPersona> personas = sessionService.getAllPersonas();
+	private InterviewerPersona selectPersona(Scanner scanner) {
+		List<InterviewerPersona> personas = personaService.getAllPersonas();
 		
 		if (personas.isEmpty()) {
 			System.out.println("⚠️ 没有找到可用的面试官人格，将使用默认人格。");
@@ -188,11 +179,11 @@ public class PracticeCommand implements Runnable {
 		// 显示所有可用人格
 		for (int i = 0; i < personas.size(); i++) {
 			InterviewerPersona persona = personas.get(i);
-			System.out.printf("  [%d] %s\n", i + 1, persona.name());
-			System.out.printf("      专业领域：%s\n", persona.expertise() != null ? persona.expertise() : "通用");
-			System.out.printf("      面试风格：%s\n", persona.style() != null ? persona.style() : "标准");
-			if (persona.description() != null && !persona.description().isEmpty()) {
-				System.out.printf("      简介：%s\n", persona.description());
+			System.out.printf("  [%d] %s\n", i + 1, persona.getName());
+			System.out.printf("      专业领域：%s\n", persona.getExpertise() != null ? persona.getExpertise() : "通用");
+			System.out.printf("      面试风格：%s\n", persona.getStyle() != null ? persona.getStyle() : "标准");
+			if (persona.getDescription() != null && !persona.getDescription().isEmpty()) {
+				System.out.printf("      简介：%s\n", persona.getDescription());
 			}
 			System.out.println();
 		}

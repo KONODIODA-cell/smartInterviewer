@@ -10,9 +10,7 @@ public class InitCommand implements Runnable {
 	@Override
 	public void run() {
 		KnowledgeBaseService knowledgeBaseService = new KnowledgeBaseService();
-		KnowledgeBaseService.InitResult result = knowledgeBaseService.init(
-				AppConfig.dbPath,
-				AppConfig.mdPath);
+		KnowledgeBaseService.InitResult result = knowledgeBaseService.init();
 
 		if (!result.success()) {
 			System.exit(1);

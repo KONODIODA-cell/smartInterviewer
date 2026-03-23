@@ -5,6 +5,8 @@ import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.embedding.onnx.bgesmallzh.BgeSmallZhEmbeddingModel;
 import org.hane.model.InterviewerPersona;
 import org.hane.service.initService.DocumentProcessor.ProcessResult;
+import org.hane.utils.AppConfig;
+import org.hane.utils.DuckDb;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -27,19 +29,16 @@ public class KnowledgeBaseService {
 	/**
 	 * 初始化知识库，构建向量索引
 	 *
-	 * @param dbPath 向量数据库文件路径
-	 * @param mdPath Markdown 文件扫描路径
 	 * @return 处理结果
 	 */
-	public InitResult init(String dbPath, String mdPath) {
+	public InitResult init() {
+		var mdPath = AppConfig.mdPath;
+
 		System.out.println("🚀 初始化知识库...");
 		System.out.println("📂 扫描：" + mdPath);
 
 		// 向量数据库
-		DuckDBEmbeddingStore ragDb = DuckDBEmbeddingStore
-				.builder()
-				.filePath(dbPath)
-				.build();
+		DuckDBEmbeddingStore ragDb = DuckDb.getRagConn();
 
 		// 嵌入模型 (中文优化)
 		EmbeddingModel embeddingModel = new BgeSmallZhEmbeddingModel();
@@ -74,9 +73,9 @@ public class KnowledgeBaseService {
 				.generatePersonasFromFiles(mdFiles);
 		System.out.println("✅ 生成了 " + personas.size() + " 个 AI 面试官人格");
 
-		// 保存人格到向量数据库
-		System.out.println("💾 正在保存人格到向量数据库...");
-		personaGenerator.savePersonasToVectorStore(personas, ragDb, embeddingModel);
+		// 保存人格到数据库（使用独立连接，避免与 ragDb 冲突）
+		System.out.println("💾 正在保存人格到数据库...");
+		personaGenerator.savePersonas(personas);
 		System.out.println("✅ 人格保存完成");
 
 		return new InitResult(

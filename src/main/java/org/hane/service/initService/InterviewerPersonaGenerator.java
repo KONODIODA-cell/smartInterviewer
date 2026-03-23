@@ -1,19 +1,20 @@
 package org.hane.service.initService;
 
-import dev.langchain4j.community.store.embedding.duckdb.DuckDBEmbeddingStore;
-import dev.langchain4j.data.document.Metadata;
-import dev.langchain4j.data.embedding.Embedding;
-import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.service.AiServices;
 import org.hane.model.InterviewerPersona;
 import org.hane.utils.AppConfig;
+import org.hane.utils.DuckDb;
 
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.Statement;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static java.sql.DriverManager.*;
 
 /**
  * 面试官人格生成器
@@ -72,20 +73,20 @@ public class InterviewerPersonaGenerator {
 				InterviewerPersona persona = personaAiService.generatePersona(filePathsStr);
 
 				// 补充缺失字段
-				if (persona.id() == null || persona.id().isBlank()) {
+				if (persona.getId() == null || persona.getId().isBlank()) {
 					persona.setId(UUID.randomUUID().toString());
 				}
-				if (persona.filePatterns() == null || persona.filePatterns().isEmpty()) {
+				if (persona.getFilePatterns() == null || persona.getFilePatterns().isEmpty()) {
 					// 从文件路径提取关键词
 					String patterns = extractKeywords(batch);
 					persona.setFilePatterns(patterns);
 				}
-				if (persona.systemPrompt() == null || persona.systemPrompt().isEmpty()) {
+				if (persona.getSystemPrompt() == null || persona.getSystemPrompt().isEmpty()) {
 					persona.setSystemPrompt(getDefaultSystemPrompt());
 				}
 
 				personas.add(persona);
-				System.out.println("    ✓ 生成人格：" + persona.name() + " (" + persona.expertise() + ")");
+				System.out.println("    ✓ 生成人格：" + persona.getName() + " (" + persona.getExpertise() + ")");
 
 				// 添加延迟，避免 API 限流
 				if (i < batchCount - 1) {
@@ -200,52 +201,51 @@ public class InterviewerPersonaGenerator {
 	}
 
 	/**
-	 * 保存人格到向量数据库
+	 * 保存人格到数据库
+	 * @param personas 人格列表
 	 */
-	public void savePersonasToVectorStore(List<InterviewerPersona> personas,
-	                                      DuckDBEmbeddingStore ragDb,
-	                                      EmbeddingModel embeddingModel) {
+	public void savePersonas(List<InterviewerPersona> personas) {
 		for (InterviewerPersona persona : personas) {
-			try {
-				// 构建人格文本描述（用于向量化）
-				String personaText = String.format("""
-					面试官人格：%s
-					描述：%s
-					专业领域：%s
-					面试风格：%s
-					难度偏好：%s
-					系统设定：%s
-					""",
-						persona.name(),
-						persona.description(),
-						persona.expertise(),
-						persona.style(),
-						persona.difficultyBias(),
-						persona.systemPrompt() != null 
-							? persona.systemPrompt().substring(0, Math.min(200, persona.systemPrompt().length()))
-							: ""
-				);
+			try(Connection conn = DuckDb.getConn()) {
+				// 1. 创建人格表（如果不存在）
+				try (Statement stmt = conn.createStatement()) {
+					stmt.execute("""
+						CREATE TABLE IF NOT EXISTS interviewer_personas (
+							id VARCHAR PRIMARY KEY,
+							name VARCHAR NOT NULL,
+							description VARCHAR,
+							system_prompt TEXT,
+							file_patterns VARCHAR,
+							expertise VARCHAR,
+							style VARCHAR,
+							difficulty_bias VARCHAR,
+							priority INT,
+							created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+						)
+					""");
+				}
 
-				// 创建文本段
-				TextSegment segment = TextSegment.from(personaText,
-						Metadata.from(Map.of(
-								"type", "interviewer_persona",
-								"persona_id", persona.id(),
-								"persona_name", persona.name(),
-								"expertise", persona.expertise(),
-								"style", persona.style(),
-								"difficulty_bias", persona.difficultyBias(),
-								"priority", String.valueOf(persona.priority()),
-								"file_patterns", persona.filePatterns() != null ? persona.filePatterns() : ""
-						)));
+				// 2. 插入或更新人格记录
+				try (PreparedStatement ps = conn.prepareStatement("""
+					INSERT OR REPLACE INTO interviewer_personas 
+					(id, name, description, system_prompt, file_patterns, expertise, style, difficulty_bias, priority)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+				""")) {
+					ps.setString(1, persona.getId());
+					ps.setString(2, persona.getName());
+					ps.setString(3, persona.getDescription());
+					ps.setString(4, persona.getSystemPrompt());
+					ps.setString(5, persona.getFilePatterns());
+					ps.setString(6, persona.getExpertise());
+					ps.setString(7, persona.getStyle());
+					ps.setString(8, persona.getDifficultyBias());
+					ps.setInt(9, persona.getPriority());
+					ps.executeUpdate();
+				}
 
-				// 生成嵌入并保存
-				Embedding embedding = embeddingModel.embed(segment).content();
-				ragDb.add(embedding, segment);
-
-				System.out.println("  💾 已保存人格：" + persona.name());
+				System.out.println("  💾 已保存人格：" + persona.getName());
 			} catch (Exception e) {
-				System.err.println("  ✗ 保存人格 '" + persona.name() + "' 失败：" + e.getMessage());
+				System.err.println("  ✗ 保存人格 '" + persona.getName() + "' 失败：" + e.getMessage());
 			}
 		}
 	}
