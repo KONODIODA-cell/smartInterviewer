@@ -1,5 +1,6 @@
 package org.hane.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
 /**
@@ -7,16 +8,16 @@ import java.util.List;
  */
 public record EvaluationResult(
 		int score,                                    // 总分 0-10
-		DimensionScores dimensionScores,              // 分项得分
+		@JsonProperty("dimension_scores") DimensionScores dimensionScores,              // 分项得分
 		List<String> strengths,                       // 亮点
 		List<String> weaknesses,                      // 不足
-		List<String> missingPoints,                   // 遗漏点
+		@JsonProperty("missing_points") List<String> missingPoints,                   // 遗漏点
 		String suggestion,                            // 改进建议
-		String followUp                               // 建议追问
+		@JsonProperty("follow_up") String followUp                               // 建议追问
 ) {
 	public record DimensionScores(
-			int accuracy,      // 准确性 0-10
-			int completeness,  // 完整性 0-10
-			int depth          // 深度 0-10
+			@JsonProperty("accuracy") int accuracy,      // 准确性 0-10
+			@JsonProperty("completeness") int completeness,  // 完整性 0-10
+			@JsonProperty("depth") int depth          // 深度 0-10
 	) {}
 }

@@ -14,8 +14,9 @@ import org.hane.model.InterviewerPersona;
 import org.hane.utils.AppConfig;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -26,32 +27,41 @@ import static org.hane.model.InterviewQuestion.*;
  * 负责管理面试流程、AI 交互、人格切换等
  */
 public class InterviewSessionService {
-  private static int questionCount;
   private static Difficulty queestionDifficulty;
-  private static InterviewerPersona currentPersona;
-  private InterviewAiService aiService;
   private final InterviewKnowledgeBase knowledgeBase;
   private final ChatMemory chatMemory;
 
+  // 所有的主题
+  private static List<String> topics;
+
+  // ai
+  private static ChatModel model;
+  private static InterviewAiService aiServices;
 
   public InterviewSessionService(InterviewerPersona persona, int count, Difficulty difficulty) {
-    // 初始化 ChatModel（所有 AI 服务共用）
-    var chatModel = OpenAiChatModel.builder()
-        .baseUrl(AppConfig.aiServiceUrl)
-        .apiKey(AppConfig.aiApiKey)
-        .modelName(AppConfig.aiModelName)
-        .temperature(1.0)
-        .build();
+    // 初始化模型
+    model = OpenAiChatModel.builder().
+        modelName(AppConfig.aiModelName).
+        baseUrl(AppConfig.aiServiceUrl).
+        apiKey(AppConfig.aiApiKey).
+        temperature(0.6).
+        build();
 
     // 初始化知识库
     this.knowledgeBase = new InterviewKnowledgeBase(Path.of(AppConfig.dbPath));
 
     // 初始化对话历史
     this.chatMemory = MessageWindowChatMemory.withMaxMessages(20);
-
-    currentPersona = persona;
-    questionCount = count + 20;
     queestionDifficulty = difficulty;
+
+    // 生成对应的题目主题
+    aiServices = AiServices.create(InterviewAiService.class, model);
+    topics = aiServices.genTopics(persona.getName(),
+        persona.getExpertise(),
+        persona.getStyle(),
+        persona.getDifficultyBias(),
+        persona.getDescription(),
+        count + 20);
   }
 
 
@@ -61,23 +71,39 @@ public class InterviewSessionService {
    * @return 面试题
    */
   public InterviewQuestion nextQuestion() {
-    // 1. 从 DuckDB 检索相关面经（Top 3）
-    List<InterviewReference> refs = knowledgeBase.search(topic, 3);
-
-    if (refs.isEmpty()) {
-      throw new RuntimeException("未找到主题 '" + topic + "' 的相关面经资料，请先执行 init 命令初始化知识库");
+    if (topics.isEmpty()) {
+      throw new RuntimeException("topic is empty");
     }
 
-    // 2. 拼接上下文
+    String topic = "";
+    List<InterviewReference> refs = List.of();
+    for (int i = 0; i < 3; i++) {
+      // 随机选取一个聊天主题
+      int index = (int) (Math.random() * topics.size());
+      topic = topics.remove(index);
+      System.out.println("🔍 尝试搜索主题 [" + (i + 1) + "/3]: " + topic);
+      refs = knowledgeBase.search(topic, 3);
+      System.out.println("   找到 " + refs.size() + " 条结果");
+      if (!refs.isEmpty()) {
+        break;
+      }
+    }
+
+    if (refs.isEmpty()) {
+      System.err.println("剩余 topics: " + topics);
+      throw new RuntimeException("重试三次仍未找到相关主题");
+    }
+
+    // 拼接上下文
     String context = refs.stream()
         .map(r -> String.format("[%s, 相似度%.2f]: %s",
             r.metadata().getString("file_name"), r.score(), r.content()))
         .collect(Collectors.joining("\n---\n"));
 
-    // 3. AI 基于真实面经生成题目
-    InterviewQuestion rawQuestion = aiService.generateQuestion(context);
+    // AI 基于真实面经生成题目
+    InterviewQuestion rawQuestion = aiServices.generateQuestion(context);
 
-    // 4. 补充元数据
+    // 补充元数据
     String source = refs.getFirst().metadata().getString("file_name");
     return new InterviewQuestion(
         UUID.randomUUID().toString(),
@@ -93,17 +119,16 @@ public class InterviewSessionService {
   /**
    * 评估回答（对比向量库中的标准答案）
    *
-   * @param questionId 问题ID
    * @param userAnswer 用户回答
    * @param question   面试题
    * @return 评估结果
    */
-  public EvaluationResult evaluate(String questionId, String userAnswer, InterviewQuestion question) {
+  public EvaluationResult evaluate(String userAnswer, InterviewQuestion question) {
     // 向量检索该题的标准答案要点
     String reference = question.suggestedAnswer();
 
     // AI 评估
-    EvaluationResult result = aiService.evaluateAnswer(reference, userAnswer);
+    EvaluationResult result = aiServices.evaluateAnswer(reference, userAnswer);
 
     // 保存到会话历史
     chatMemory.add(UserMessage.from("问题：" + question.content() + "\n回答：" + userAnswer));
@@ -120,11 +145,29 @@ public class InterviewSessionService {
    * @return 追问内容
    */
   public String generateFollowUp(EvaluationResult result, InterviewQuestion question) {
-    String previousQa = String.format("问题：%s\n回答评估：%s\n建议追问方向：%s",
-        question.content(),
-        result.suggestion(),
-        result.followUp());
+    // 如果评估结果已经包含追问建议，直接使用
+    if (result.followUp() != null && !result.followUp().trim().isEmpty()) {
+      return result.followUp();
+    }
 
-    return aiService.generateFollowUp(previousQa);
+    // 否则基于评估结果生成更深入的追问
+    String previousQa = String.format("""
+        问题：%s
+        考察点：%s
+        用户回答评估：%s
+        亮点：%s
+        不足：%s
+        遗漏点：%s
+        改进建议：%s
+        """,
+        question.content(),
+        String.join("、", question.keyPoints()),
+        result.suggestion(),
+        result.strengths().isEmpty() ? "无明显亮点" : String.join("、", result.strengths()),
+        result.weaknesses().isEmpty() ? "无明显不足" : String.join("、", result.weaknesses()),
+        result.missingPoints().isEmpty() ? "无遗漏点" : String.join("、", result.missingPoints()),
+        result.suggestion());
+
+    return aiServices.generateFollowUp(previousQa);
   }
 }

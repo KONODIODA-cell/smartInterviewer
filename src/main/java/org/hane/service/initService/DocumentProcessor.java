@@ -139,7 +139,8 @@ public class DocumentProcessor {
 			return;
 		}
 		List<Embedding> embeddings = embeddingModel.embedAll(segments).content();
-		ragDb.addAll(embeddings);
+		// 同时存入向量和对应的 TextSegment，否则检索时 embedded() 会返回 null
+		ragDb.addAll(embeddings, segments);
 	}
 
 	/**

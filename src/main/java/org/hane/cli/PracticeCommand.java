@@ -44,9 +44,15 @@ public class PracticeCommand implements Runnable {
 
 		// 获取所有的面试官人格
 		// 用户选择面试官人格
-		InterviewerPersona selectedPersona = selectPersona(scanner);
+    InterviewerPersona selectedPersona;
+    try {
+      selectedPersona = selectPersona(scanner);
+    } catch (Exception e) {
+	    System.out.println("查询面试官人格失败: "+e.getMessage());
+      throw new RuntimeException(e);
+    }
 
-		// 初始化面试会话服务
+    // 初始化面试会话服务
 		InterviewSessionService sessionService = new InterviewSessionService(selectedPersona,questionCount,difficulty);
 		try {
 			// 开始面试
@@ -84,7 +90,25 @@ public class PracticeCommand implements Runnable {
 
 				// 评估回答
 				System.out.println("\n🤖 AI 评估中...");
-				EvaluationResult result = sessionService.evaluate(question.id(), userAnswer, question);
+				EvaluationResult result = sessionService.evaluate(userAnswer, question);
+
+				// 智能追问（基于评估结果）
+				if (result.score() < 9) {
+					System.out.println("\n🔍 AI 追问：" + sessionService.generateFollowUp(result, question));
+					System.out.println("\n💬 请回答追问（输入空行跳过）：");
+					StringBuilder followUpBuilder = new StringBuilder();
+					String lineFollowUp;
+					while (!(lineFollowUp = scanner.nextLine()).isEmpty()) {
+						followUpBuilder.append(lineFollowUp).append("\n");
+					}
+					String followUpAnswer = followUpBuilder.toString().trim();
+
+					if (!followUpAnswer.isEmpty()) {
+						System.out.println("✅ 已记录追问回答");
+						// 可选：对追问回答进行二次评估
+						// EvaluationResult followUpResult = sessionService.evaluate(followUpAnswer, question);
+					}
+				}
 
 				// 显示评估结果
 				System.out.println("\n📊 评估结果：");
@@ -110,21 +134,6 @@ public class PracticeCommand implements Runnable {
 				}
 
 				System.out.println("\n💡 建议：" + result.suggestion());
-
-				// 追问（根据得分决定是否追问）
-				if (result.score() < 9) {
-					System.out.println("\n🔍 追问：" + result.followUp());
-					System.out.println("\n💬 请回答追问（输入空行跳过）：");
-					StringBuilder followUpBuilder = new StringBuilder();
-					while (!(line = scanner.nextLine()).isEmpty()) {
-						followUpBuilder.append(line).append("\n");
-					}
-					String followUpAnswer = followUpBuilder.toString().trim();
-
-					if (!followUpAnswer.isEmpty()) {
-						System.out.println("✅ 已记录追问回答");
-					}
-				}
 
 				totalScore += result.score();
 				questionIndex++;
@@ -166,12 +175,11 @@ public class PracticeCommand implements Runnable {
 	 * @param scanner 输入扫描器
 	 * @return 选定的人格，如果用户取消则返回 null
 	 */
-	private InterviewerPersona selectPersona(Scanner scanner) {
+	private InterviewerPersona selectPersona(Scanner scanner) throws Exception {
 		List<InterviewerPersona> personas = personaService.getAllPersonas();
 		
 		if (personas.isEmpty()) {
-			System.out.println("⚠️ 没有找到可用的面试官人格，将使用默认人格。");
-			return null;
+			throw new RuntimeException("personas is empty");
 		}
 		
 		System.out.println("\n🎭 请选择 AI 面试官人格：\n");

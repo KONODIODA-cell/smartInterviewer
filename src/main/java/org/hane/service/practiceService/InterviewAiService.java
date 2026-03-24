@@ -5,7 +5,8 @@ import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.V;
 import org.hane.model.EvaluationResult;
 import org.hane.model.InterviewQuestion;
-import org.hane.model.InterviewerPersona;
+
+import java.util.List;
 
 /**
  * AI 面试服务接口
@@ -46,22 +47,22 @@ public interface InterviewAiService {
   @UserMessage("""
       参考资料（标准答案要点）：
       {{reference}}
-      
+
       用户回答：
       {{answer}}
-      
+
       评估维度（满分 10 分）：
       1. 准确性（40%）：技术细节是否正确（如 CMS 和 G1 的区别是否说反）
       2. 完整性（30%）：是否覆盖参考答案的关键要点（缺 1 个扣 2 分）
       3. 深度（30%）：是否触及原理层（如不只说"用 Redis"，还能说"为什么不用本地缓存"）
-      
+
       评分标准：
       - 9-10 分：优秀，可进下一轮
       - 7-8 分：良好，有小瑕疵
       - 5-6 分：及格，需补充学习
       - <5 分：明显知识盲区
-      
-      必须按 JSON 格式返回：
+
+      必须按 JSON 格式返回，不要使用 Markdown 代码块标记（如 ```json），直接返回纯 JSON：
       {
         "score": 8,
         "dimension_scores": {
@@ -94,14 +95,14 @@ public interface InterviewAiService {
 
   @SystemMessage("""
       你是一位专业的面试主题规划专家。基于当前面试官的人格设定，生成相关的面试主题。
-      
+
       主题生成原则：
       1. 紧扣人格的专业领域（expertise）和难度偏好（difficultyBias）
       2. 覆盖该领域的核心技术栈，从基础到高级分层设计
       3. 主题应该是具体的技术方向，而非泛泛的概念（如"JVM 内存模型"而非"Java 基础"）
       4. 考虑实际面试场景，优先选择高频考察点
       5. 主题之间应该有逻辑层次，形成完整的知识体系
-      
+
       主题格式要求：
       - 简洁明确，2-8 个字为宜
       - 使用标准技术术语
@@ -109,18 +110,23 @@ public interface InterviewAiService {
       """)
   @UserMessage("""
       当前面试官人格：
-      - 名称：{{persona.name}}
-      - 专业领域：{{persona.expertise}}
-      - 面试风格：{{persona.style}}
-      - 难度偏好：{{persona.difficultyBias}}
-      - 人格描述：{{persona.description}}
-      
+      - 名称：{{name}}
+      - 专业领域：{{expertise}}
+      - 面试风格：{{style}}
+      - 难度偏好：{{difficultyBias}}
+      - 人格描述：{{description}}
+
       请生成 {{count}} 个面试主题，这些主题应该：
-      1. 覆盖 {{persona.expertise}} 领域的核心知识点
-      2. 符合 {{persona.difficultyBias}} 难度层级
-      3. 体现 {{persona.style}} 的考察风格
-      
+      1. 覆盖 {{expertise}} 领域的核心知识点
+      2. 符合 {{difficultyBias}} 难度层级
+      3. 体现 {{style}} 的考察风格
+
       直接返回主题名称列表，无需解释。
       """)
-  String[] genTopics(InterviewerPersona persona, @V("count") int count);
+  List<String> genTopics(@V("name") String name,
+                                   @V("expertise") String expertise,
+                                   @V("style") String style,
+                                   @V("difficultyBias") String difficultyBias,
+                                   @V("description") String description,
+                                   @V("count") int count);
 }
