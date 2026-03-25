@@ -18,6 +18,56 @@
         <graalvm.version>21.0.2</graalvm.version>
     </properties>
 
+    <profiles>
+        <!-- Native Image 编译 profile -->
+        <profile>
+            <id>native</id>
+            <activation>
+                <property>
+                    <name>native</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                        <version>0.10.1</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <imageName>ai-interviewer</imageName>
+                            <mainClass>org.hane.cli.InterViewerCli</mainClass>
+                            <buildArgs>
+                                <!-- 基础优化 -->
+                                <buildArg>--no-fallback</buildArg>
+                                <buildArg>-march=compatibility</buildArg>
+                                <buildArg>-O2</buildArg>
+
+                                <!-- JNI 支持（DuckDB 必需） -->
+                                <buildArg>--enable-jni</buildArg>
+                                <buildArg>-H:+JNI</buildArg>
+
+                                <!-- 资源包含（Embedding 模型文件等） -->
+                                <buildArg>-H:IncludeResources=.*\\.onnx$</buildArg>
+                                <buildArg>-H:IncludeResources=.*\\.db$</buildArg>
+                                <buildArg>-H:IncludeResources=.*\\.bin$</buildArg>
+                                <buildArg>-H:IncludeResources=.*\\.txt$</buildArg>
+
+                                <!-- 反射配置 -->
+                                <buildArg>-H:ReflectionConfigurationFiles=reflect-config.json</buildArg>
+
+                                <!-- 压缩选项（选择其一） -->
+                                <!-- 完全静态编译（使用 musl） -->
+                                <buildArg>--static</buildArg>
+                                <buildArg>-H:UseMuslC=/opt/musl</buildArg>
+                            </buildArgs>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
     <dependencies>
         <!-- CLI -->
         <dependency>
@@ -77,38 +127,8 @@
             <version>2.10.1</version>
         </dependency>
     </dependencies>
-
     <build>
         <plugins>
-            <!-- GraalVM Native Image 插件 -->
-            <plugin>
-                <groupId>org.graalvm.buildtools</groupId>
-                <artifactId>native-maven-plugin</artifactId>
-                <version>0.10.1</version>
-                <extensions>true</extensions>
-                <configuration>
-                    <imageName>ai-interviewer</imageName>
-                    <mainClass>com.interviewer.cli.AiInterviewerCli</mainClass>
-                    <buildArgs>
-                        <!-- 基础优化 -->
-                        <buildArg>--no-fallback</buildArg>
-                        <buildArg>-march=compatibility</buildArg>
-                        <buildArg>-O2</buildArg>
-
-                        <!-- JNI 支持（DuckDB 必需） -->
-                        <buildArg>--enable-jni</buildArg>
-                        <buildArg>-H:+JNI</buildArg>
-
-                        <!-- 资源包含（Embedding 模型文件等） -->
-                        <buildArg>-H:IncludeResources=.*\.onnx$</buildArg>
-                        <buildArg>-H:IncludeResources=.*\.db$</buildArg>
-
-                        <!-- 压缩 -->
-                        <buildArg>-H:+StaticExecutableWithDynamicLibC</buildArg>
-                    </buildArgs>
-                </configuration>
-            </plugin>
-
             <!-- Picocli 注解处理器（自动生成反射配置） -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

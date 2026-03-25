@@ -1,222 +1,133 @@
 package org.hane.cli;
 
-import org.hane.model.EvaluationResult;
+import org.hane.cli.practice.*;
 import org.hane.model.InterviewQuestion;
 import org.hane.model.InterviewerPersona;
-import org.hane.service.practiceService.InterviewSessionService;
-import org.hane.service.practiceService.PersonaService;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
-
-import java.util.List;
-import java.util.Scanner;
-
-import static org.hane.model.InterviewQuestion.*;
 
 /**
  * 模拟面试命令
  * 支持交互式面试流程，自动匹配 AI 面试官人格
  */
 @Command(
-		name = "start",
-		description = "开始模拟面试",
-		mixinStandardHelpOptions = true
+        name = "start",
+        description = "开始模拟面试",
+        mixinStandardHelpOptions = true
 )
 public class PracticeCommand implements Runnable {
 
-	@Option(
-			names = {"-d", "--difficulty"},
-			description = "题目难度：BASIC(基础)、INTERMEDIATE(进阶)、ADVANCED(挑战)",
-			defaultValue = "INTERMEDIATE"
-	)
-	private Difficulty difficulty;
+    @Option(
+            names = {"-d", "--difficulty"},
+            description = "题目难度：BASIC(基础)、INTERMEDIATE(进阶)、ADVANCED(挑战)",
+            defaultValue = "INTERMEDIATE"
+    )
+    private InterviewQuestion.Difficulty difficulty;
 
-	@Option(
-			names = {"-c", "--count"},
-			description = "面试题数量",
-			defaultValue = "5"
-	)
-	private int questionCount;
+    @Option(
+            names = {"-c", "--count"},
+            description = "面试题数量",
+            defaultValue = "5"
+    )
+    private int questionCount;
 
-	@Override
-	public void run() {
-		Scanner scanner = new Scanner(System.in);
+    // 组件注入
+    private final PersonaSelector personaSelector;
+    private final UserInputHandler inputHandler;
 
-		// 获取所有的面试官人格
-		// 用户选择面试官人格
-    InterviewerPersona selectedPersona;
-    try {
-      selectedPersona = selectPersona(scanner);
-    } catch (Exception e) {
-	    System.out.println("查询面试官人格失败: "+e.getMessage());
-      throw new RuntimeException(e);
+    public PracticeCommand() {
+        this.personaSelector = new PersonaSelector();
+        this.inputHandler = new UserInputHandler();
     }
 
-    // 初始化面试会话服务
-		InterviewSessionService sessionService = new InterviewSessionService(selectedPersona,questionCount,difficulty);
-		try {
-			// 开始面试
-			System.out.println("\n按 Enter 键开始第一题...");
-			scanner.nextLine();
+    @Override
+    public void run() {
+        try {
+            // 1. 选择面试官人格
+            InterviewerPersona selectedPersona = selectPersona();
+            if (selectedPersona == null) {
+                System.out.println("已取消面试");
+                return;
+            }
 
-			int questionIndex = 1;
-			int totalScore = 0;
+            // 2. 初始化面试会话
+            InterviewSession session = new InterviewSession(selectedPersona, questionCount, difficulty);
+            QuestionFlowController flowController = new QuestionFlowController(session);
+            InterviewResultDisplayer resultDisplayer = new InterviewResultDisplayer();
 
-			while (questionIndex <= questionCount) {
-				// 生成题目
-				System.out.printf("\n========== 第 %d/%d 题 ==========%n", questionIndex, questionCount);
-				InterviewQuestion question = sessionService.nextQuestion();
+            // 3. 开始面试流程
+            executeInterview(session, flowController, resultDisplayer);
 
-				System.out.println("\n📝 " + question.content());
-				System.out.println("\n考察点：" + String.join("、", question.keyPoints()));
-				System.out.println("难度：" + question.difficulty());
-				if (question.source() != null) {
-					System.out.println("来源：" + question.source());
-				}
+        } catch (Exception e) {
+            System.err.println("❌ 面试过程出错：" + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            inputHandler.close();
+        }
+    }
 
-				// 获取用户回答
-				System.out.println("\n💬 请输入你的回答（输入空行结束）：");
-				StringBuilder answerBuilder = new StringBuilder();
-				String line;
-				while (!(line = scanner.nextLine()).isEmpty()) {
-					answerBuilder.append(line).append("\n");
-				}
-				String userAnswer = answerBuilder.toString().trim();
+    /**
+     * 选择面试官人格
+     */
+    private InterviewerPersona selectPersona() {
+        try {
+            return personaSelector.selectPersona(inputHandler);
+        } catch (Exception e) {
+            System.out.println("查询面试官人格失败：" + e.getMessage());
+            throw new RuntimeException(e);
+        }
+    }
 
-				if (userAnswer.isEmpty()) {
-					System.out.println("⚠️ 回答为空，跳过本题...");
-					continue;
-				}
+    /**
+     * 执行完整的面试流程
+     */
+    private void executeInterview(InterviewSession session, 
+                                  QuestionFlowController flowController,
+                                  InterviewResultDisplayer resultDisplayer) {
+        // 等待用户开始
+        inputHandler.waitForEnter("\n按 Enter 键开始第一题...");
 
-				// 评估回答
-				System.out.println("\n🤖 AI 评估中...");
-				EvaluationResult result = sessionService.evaluate(userAnswer, question);
+        // 逐题进行面试
+        while (session.hasMoreQuestions()) {
+            processSingleQuestion(session, flowController);
+            
+            // 如果不是最后一题，等待进入下一题
+            if (session.hasMoreQuestions()) {
+                inputHandler.waitForEnter("\n按 Enter 键进入下一题...");
+            }
+        }
 
-				// 智能追问（基于评估结果）
-				if (result.score() < 9) {
-					System.out.println("\n🔍 AI 追问：" + sessionService.generateFollowUp(result, question));
-					System.out.println("\n💬 请回答追问（输入空行跳过）：");
-					StringBuilder followUpBuilder = new StringBuilder();
-					String lineFollowUp;
-					while (!(lineFollowUp = scanner.nextLine()).isEmpty()) {
-						followUpBuilder.append(lineFollowUp).append("\n");
-					}
-					String followUpAnswer = followUpBuilder.toString().trim();
+        // 显示面试总结
+        resultDisplayer.displaySummary(session.getAverageScore(), session.getTotalQuestions());
+    }
 
-					if (!followUpAnswer.isEmpty()) {
-						System.out.println("✅ 已记录追问回答");
-						// 可选：对追问回答进行二次评估
-						// EvaluationResult followUpResult = sessionService.evaluate(followUpAnswer, question);
-					}
-				}
+    /**
+     * 处理单道题目的完整流程
+     */
+    private void processSingleQuestion(InterviewSession session, 
+                                       QuestionFlowController flowController) {
+        // 生成并显示题目
+        InterviewQuestion question = session.nextQuestion();
+        flowController.displayQuestion(question, 
+            session.getCurrentQuestionIndex(), 
+            session.getTotalQuestions());
 
-				// 显示评估结果
-				System.out.println("\n📊 评估结果：");
-				System.out.println("总分：" + result.score() + "/10");
-				System.out.println("分项得分：");
-				System.out.println("  - 准确性：" + result.dimensionScores().accuracy() + "/10");
-				System.out.println("  - 完整性：" + result.dimensionScores().completeness() + "/10");
-				System.out.println("  - 深度：" + result.dimensionScores().depth() + "/10");
+        // 获取用户回答
+        String userAnswer = inputHandler.getUserAnswer();
+        if (userAnswer.isEmpty()) {
+            System.out.println("⚠️ 回答为空，跳过本题...");
+            return;
+        }
 
-				if (!result.strengths().isEmpty()) {
-					System.out.println("\n✅ 亮点：");
-					result.strengths().forEach(s -> System.out.println("  • " + s));
-				}
+        // 处理回答（评估、追问、显示结果）
+        boolean hasFollowUp = flowController.processQuestion(question, userAnswer);
 
-				if (!result.weaknesses().isEmpty()) {
-					System.out.println("\n⚠️ 不足：");
-					result.weaknesses().forEach(w -> System.out.println("  • " + w));
-				}
-
-				if (!result.missingPoints().isEmpty()) {
-					System.out.println("\n📌 遗漏的关键点：");
-					result.missingPoints().forEach(m -> System.out.println("  • " + m));
-				}
-
-				System.out.println("\n💡 建议：" + result.suggestion());
-
-				totalScore += result.score();
-				questionIndex++;
-
-				if (questionIndex <= questionCount) {
-					System.out.println("\n按 Enter 键进入下一题...");
-					scanner.nextLine();
-				}
-			}
-
-			// 面试结束，显示总结
-			double averageScore = (double) totalScore / questionCount;
-			System.out.println("\n========== 面试结束 ==========");
-			System.out.printf("📊 平均得分：%.1f/10%n", averageScore);
-
-			if (averageScore >= 9) {
-				System.out.println("🌟 评价：表现优秀！可以冲击一线大厂");
-			} else if (averageScore >= 7) {
-				System.out.println("👍 评价：基础扎实，部分知识点需要深化");
-			} else if (averageScore >= 5) {
-				System.out.println("📚 评价：需要加强基础知识的学习");
-			} else {
-				System.out.println("💪 评价：建议系统学习相关技术栈");
-			}
-
-		} catch (Exception e) {
-			System.err.println("❌ 面试过程出错：" + e.getMessage());
-			e.printStackTrace();
-		} finally {
-			scanner.close();
-		}
-	}
-
-	PersonaService personaService = new PersonaService();
-
-	/**
-	 * 交互式选择面试官人格
-	 * 
-	 * @param scanner 输入扫描器
-	 * @return 选定的人格，如果用户取消则返回 null
-	 */
-	private InterviewerPersona selectPersona(Scanner scanner) throws Exception {
-		List<InterviewerPersona> personas = personaService.getAllPersonas();
-		
-		if (personas.isEmpty()) {
-			throw new RuntimeException("personas is empty");
-		}
-		
-		System.out.println("\n🎭 请选择 AI 面试官人格：\n");
-		
-		// 显示所有可用人格
-		for (int i = 0; i < personas.size(); i++) {
-			InterviewerPersona persona = personas.get(i);
-			System.out.printf("  [%d] %s\n", i + 1, persona.getName());
-			System.out.printf("      专业领域：%s\n", persona.getExpertise() != null ? persona.getExpertise() : "通用");
-			System.out.printf("      面试风格：%s\n", persona.getStyle() != null ? persona.getStyle() : "标准");
-			if (persona.getDescription() != null && !persona.getDescription().isEmpty()) {
-				System.out.printf("      简介：%s\n", persona.getDescription());
-			}
-			System.out.println();
-		}
-		
-		// 循环直到用户做出有效选择
-		while (true) {
-			System.out.print("请输入序号选择面试官 (1-" + personas.size() + ", 输入 0 取消): ");
-			String input = scanner.nextLine().trim();
-			
-			try {
-				int choice = Integer.parseInt(input);
-				
-				if (choice == 0) {
-					return null;
-				}
-				
-				if (choice >= 1 && choice <= personas.size()) {
-					return personas.get(choice - 1);
-				}
-				
-				System.out.println("⚠️ 无效的选择，请输入 1-" + personas.size() + " 之间的数字。");
-				
-			} catch (NumberFormatException e) {
-				System.out.println("⚠️ 请输入有效的数字。");
-			}
-		}
-	}
+        // 获取追问回答（如果有追问）
+        if (hasFollowUp) {
+            String followUpAnswer = inputHandler.getFollowUpAnswer();
+            if (!followUpAnswer.isEmpty()) {
+                System.out.println("✅ 已记录追问回答");
+            }
+        }
+    }
 }

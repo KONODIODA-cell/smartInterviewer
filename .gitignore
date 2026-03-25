@@ -1,64 +1,44 @@
-### Maven ###
+```
+# Java/Maven specific
 target/
-!.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+*.class
+*.jar
+*.war
+*.ear
 
-### Kotlin ###
-.kotlin
+# Dependencies
+.mypy_cache/
+.pytest_cache/
+coverage/
+htmlcov/
+.gradle/
+node_modules/
 
-### IntelliJ IDEA ###
-.idea/
-*.iws
-*.iml
-*.ipr
-out/
-
-### Eclipse ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
+# IDE
 .vscode/
+.idea/
+*.swp
+*.swo
 
-### Mac OS ###
-.DS_Store
-
-### Windows ###
-Thumbs.db
-
-### Logs ###
+# Logs
 *.log
-logs/
 
-### Environment ###
+# Environment
 .env
 .env.local
-.env.*.local
+*.env.*
 
-### Temporary files ###
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
 *.tmp
-*.bak
-*.swp
-*~
 
-### resource docs ###
-/docs
-
-### db ####
-**.db**
+# Build artifacts
+dist/
+build/
+*.o
+*.obj
+*.out
+```
